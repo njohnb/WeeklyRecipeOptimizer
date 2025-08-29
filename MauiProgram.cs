@@ -4,6 +4,7 @@ using RecipeOptimizer.Data;
 using RecipeOptimizer.ViewModels;
 using RecipeOptimizer.Views;
 using RecipeOptimizer.Models;
+using RecipeOptimizer.Services;
 
 namespace RecipeOptimizer;
 
@@ -36,6 +37,13 @@ public static class MauiProgram
         // builder.Services.AddSingleton<HomePage>();
         // builder.Services.AddSingleton<HomeViewModel>();
 
+        builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        
+        builder.Services.AddTransient<LibraryViewModel>();
+        builder.Services.AddTransient<AddRecipeViewModel>();
+        builder.Services.AddTransient<AddRecipePage>(); // for Shell to resolve
+        
+        
         var app = builder.Build();
 
         // 3) Ensure SQLite bundle + migrations/crations

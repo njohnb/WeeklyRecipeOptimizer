@@ -2,32 +2,91 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="RecipeOptimizer.Views.LibraryPage"
              Title="Library">
-    <VerticalStackLayout Padding="16" Spacing="8">
-        
-        <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
-        <CollectionView ItemsSource="{Binding Recipes}">
-            
-            <CollectionView.ItemTemplate>
-                <DataTemplate>
-                    <Frame Padding="10" Margin="0,4">
-                        <VerticalStackLayout>
-                            <Label Text="{Binding Title}" FontAttributes="Bold"/>
-                            <Label Text="{Binding Servings, StringFormat='Servings: {0}'}" FontSize="12"/>
-                            <CollectionView ItemsSource="{Binding Ingredients}">
-                                <CollectionView.ItemTemplate>
-                                    <DataTemplate>
-                                        <HorizontalStackLayout Spacing="8">
-                                            <Label Text="{Binding QtyDisplay}" />
-                                            <Label Text="{Binding Unit}" />
-                                            <Label Text="{Binding NameRaw}" />
-                                        </HorizontalStackLayout>
-                                    </DataTemplate>
-                                </CollectionView.ItemTemplate>
-                            </CollectionView>
-                        </VerticalStackLayout>
-                    </Frame>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
-    </VerticalStackLayout>
+
+  <!-- Two rows: list + bottom bar -->
+  <Grid RowDefinitions="*,Auto">
+
+    <!-- MAIN CONTENT -->
+    <Grid Grid.Row="0" Padding="16" RowDefinitions="Auto,*" RowSpacing="8">
+      <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+
+      <CollectionView Grid.Row="1"
+                      ItemsSource="{Binding Recipes}"
+                      Margin="0,8,0,8"
+                      SelectionMode="None">
+        <CollectionView.ItemTemplate>
+          <DataTemplate>
+            <Frame Padding="12" Margin="0,6" HasShadow="True" BorderColor="{AppThemeBinding Light=#DDD, Dark=#444}">
+              <Grid>
+                <Grid  RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                  <Label Grid.Row="0" Grid.ColumnSpan="2"
+                         Text="{Binding Title}" FontAttributes="Bold" FontSize="18"/>
+                  <Label Grid.Row="1" Grid.ColumnSpan="2">
+                    <Label.FormattedText>
+                      <FormattedString>
+                        <Span Text="Servings: " />
+                        <Span Text="{Binding Servings}" />
+                      </FormattedString>
+                    </Label.FormattedText>
+                  </Label>
+                  
+                  
+                  <VerticalStackLayout Grid.Row="2" Spacing="2">
+                    <!-- Ingredients preview -->
+                    <CollectionView ItemsSource="{Binding Ingredients}" SelectionMode="None">
+                      <CollectionView.ItemsLayout>
+                        <LinearItemsLayout Orientation="Vertical" />
+                      </CollectionView.ItemsLayout>
+                      <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                          <HorizontalStackLayout Spacing="8">
+                            <!-- If you have QtyDisplay, keep it; otherwise qty+unit -->
+                            <Label Text="{Binding QtyDisplay}" />
+                            <Label Text="{Binding Unit}" />
+                            <Label Text="{Binding NameRaw}" />
+                          </HorizontalStackLayout>
+                        </DataTemplate>
+                      </CollectionView.ItemTemplate>
+                    </CollectionView>
+                  </VerticalStackLayout>
+                  <!-- Corner buttons -->
+                  <HorizontalStackLayout Grid.Row="0" Grid.Column="1"
+                                         Spacing="6" HorizontalOptions="End" VerticalOptions="Start">
+                    <Button Text="✎"
+                            Padding="6,2"
+                            Clicked="OnEditRecipeClicked"
+                            CommandParameter="{Binding .}"
+                            SemanticProperties.Hint="Edit recipe" />
+                    <Button Text="🗑"
+                            Padding="6,2"
+                            Clicked="OnDeleteRecipeClicked"
+                            CommandParameter="{Binding .}"
+                            BackgroundColor="#D32F2F" TextColor="White"
+                            SemanticProperties.Hint="Delete recipe" />
+                  </HorizontalStackLayout>
+                </Grid>
+              </Grid>
+            </Frame>
+          </DataTemplate>
+        </CollectionView.ItemTemplate>
+      </CollectionView>
+    </Grid>
+
+    <!-- BOTTOM ACTION BAR (above Shell tab bar) -->
+    <Border Grid.Row="1"
+            StrokeThickness="1"
+            Stroke="{AppThemeBinding Light=#DDD, Dark=#333}"
+            BackgroundColor="{AppThemeBinding Light=#FAFAFA, Dark=#1C1C1C}">
+      <Grid Padding="12">
+        <Button Text="➕ Add Recipe"
+                x:Name="AddRecipeButton"
+                HeightRequest="44"
+                CornerRadius="12"
+                FontAttributes="Bold"
+                Clicked="OnAddRecipeClicked" />
+      </Grid>
+    </Border>
+
+  </Grid>
 </ContentPage>
+ 

@@ -1,0 +1,55 @@
+﻿<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="RecipeOptimizer.Views.AddRecipePage"
+             Title="Add Recipe">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            
+            <!-- Title -->
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Title " />
+                        <Span Text="*" TextColor="Red" FontAttributes="Bold"/>
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <Entry Placeholder="Enter recipe title" Text="{Binding Title}" />
+
+            <!-- Servings -->
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Servings " />
+                        <Span Text="*" TextColor="Red" FontAttributes="Bold"/>
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <Entry Placeholder="Enter servings" Keyboard="Numeric" Text="{Binding Servings}" />
+
+            <!-- Ingredients -->
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Ingredients " />
+                        <Span Text="*" TextColor="Red" FontAttributes="Bold"/>
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <Editor Placeholder="One per line (e.g. 1 cup tomato (diced))"
+                    AutoSize="TextChanges"
+                    Text="{Binding IngredientsText}" />
+
+            <!-- Steps -->
+            <Label Text="Steps (optional)" FontAttributes="Bold" />
+            <Editor Placeholder="Add cooking steps"
+                    AutoSize="TextChanges"
+                    Text="{Binding Steps}" />
+
+            <!-- Save -->
+            <Button Text="Save"
+                    IsEnabled="{Binding IsValid}"
+                    Command="{Binding SaveCommand}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
