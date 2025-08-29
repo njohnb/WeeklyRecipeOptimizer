@@ -1,0 +1,10 @@
+﻿<!-- /C:/Projects/RecipeOptimizer/Directory.Build.props -->
+<Project>
+    <PropertyGroup>
+        <!-- Point all Android builds to the correct JDK -->
+        <JavaSdkDirectory>C:\Program Files\Java\jdk-17</JavaSdkDirectory>
+
+        <!-- Optional: If you keep a custom Android SDK location, set it here -->
+        <AndroidSdkDirectory>C:\Program Files\android-sdk</AndroidSdkDirectory>
+    </PropertyGroup>
+</Project>
