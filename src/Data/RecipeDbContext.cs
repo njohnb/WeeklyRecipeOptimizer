@@ -1,25 +1,35 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using RecipeOptimizer.Models;
 
-namespace RecipeOptimizer.Data;
-
-public class RecipeDbContext : DbContext
+namespace RecipeOptimizer.Data
 {
-    public DbSet<Recipe> Recipes => Set<Recipe>();
-    public DbSet<WeekPlan> WeekPlans => Set<WeekPlan>();
-    public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
-    public DbSet<PantryItem> PantryItems => Set<PantryItem>();
-
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    public class RecipeDbContext : DbContext
     {
-        var path = Path.Combine(FileSystem.AppDataDirectory, "recipes.db");
-        optionsBuilder.UseSqlite($"Data Source={path}");
-    }
+        public RecipeDbContext(DbContextOptions<RecipeDbContext> options) : base(options) { }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        // seed one dummy recipe so UI isn't empty on first run
-        modelBuilder.Entity<Recipe>().HasData(new Recipe { Id = 1, Title = "Spaghetti", Servings = 4 });
+        public DbSet<Recipe> Recipes => Set<Recipe>();
+        public DbSet<RecipeIngredient> Ingredients => Set<RecipeIngredient>();
+        public DbSet<PantryItem> Pantry => Set<PantryItem>();
+        public DbSet<WeekPlan> WeekPlans => Set<WeekPlan>();
+        public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
+        public DbSet<ShoppingListItem> ShoppingListItems => Set<ShoppingListItem>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            // Minimal keys/relations if not already set
+            modelBuilder.Entity<Recipe>().HasKey(r => r.Id);
+            modelBuilder.Entity<RecipeIngredient>().HasKey(i => i.Id);
+            
+            modelBuilder.Entity<Recipe>()
+                .HasMany(r => r.Ingredients)
+                .WithOne(i => i.Recipe!)
+                .HasForeignKey(i => i.RecipeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            modelBuilder.Entity<ShoppingListItem>().HasKey(i => i.Id);
+            modelBuilder.Entity<PantryItem>().HasKey(i => i.Id);
+            modelBuilder.Entity<WeekPlan>().HasKey(i => i.Id);
+            modelBuilder.Entity<ShoppingList>().HasKey(i => i.Id);
+        }
     }
 }

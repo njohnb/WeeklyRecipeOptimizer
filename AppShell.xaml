@@ -2,15 +2,23 @@
 <Shell
     x:Class="RecipeOptimizer.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:RecipeOptimizer.Views">
     <TabBar>
-        <ShellContent Title="Home">
+       <!--<ShellContent Title="Home">
             <ContentPage Title="Home">
                 <VerticalStackLayout Padding="24" Spacing="12">
                     <Label Text="Home - shell is alive ✅" FontSize="22"/>
                     <Label Text="If you see this, AppShell is fine."/>
+                    
                 </VerticalStackLayout>
             </ContentPage>
-        </ShellContent>
+            
+        </ShellContent>-->
+        <ShellContent Title="Home" ContentTemplate="{DataTemplate views:HomePage}"/>
+        <ShellContent Title="Library" ContentTemplate="{DataTemplate views:LibraryPage}" />
+        <ShellContent Title="Plan"    ContentTemplate="{DataTemplate views:PlanPage}" />
+        <ShellContent Title="List"    ContentTemplate="{DataTemplate views:ListPage}" />
+        <ShellContent Title="Pantry"  ContentTemplate="{DataTemplate views:PantryPage}" />
     </TabBar>
 </Shell>

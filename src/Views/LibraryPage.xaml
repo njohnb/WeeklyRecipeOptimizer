@@ -1,15 +1,31 @@
 ﻿<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="RecipeOptimizer.Views.LibraryPage">
-    <VerticalStackLayout Padding="16" Spacing="12">
-        <Button Text="Add dummy recipe" Clicked="OnAddDummyClicked" />
-        <CollectionView x:Name="RecipesView">
+             x:Class="RecipeOptimizer.Views.LibraryPage"
+             Title="Library">
+    <VerticalStackLayout Padding="16" Spacing="8">
+        
+        <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+        <CollectionView ItemsSource="{Binding Recipes}">
+            
             <CollectionView.ItemTemplate>
                 <DataTemplate>
-                    <HorizontalStackLayout>
-                        <Label Text="{Binding Title}" FontAttributes="Bold" />
-                        <Label Text="{Binding Servings}" Margin="12,0,0,0"/>
-                    </HorizontalStackLayout>
+                    <Frame Padding="10" Margin="0,4">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Title}" FontAttributes="Bold"/>
+                            <Label Text="{Binding Servings, StringFormat='Servings: {0}'}" FontSize="12"/>
+                            <CollectionView ItemsSource="{Binding Ingredients}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Label Text="{Binding Qty}" />
+                                            <Label Text="{Binding Unit}" />
+                                            <Label Text="{Binding NameRaw}" />
+                                        </HorizontalStackLayout>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </VerticalStackLayout>
+                    </Frame>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>

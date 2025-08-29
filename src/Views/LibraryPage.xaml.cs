@@ -1,30 +1,21 @@
-﻿using Microsoft.EntityFrameworkCore;
-using RecipeOptimizer.Data;
-using RecipeOptimizer.Models;
+﻿using RecipeOptimizer.ViewModels;
 
 namespace RecipeOptimizer.Views;
 
 public partial class LibraryPage : ContentPage
 {
-    private readonly RecipeDbContext _db; // only for phase 0
+    private readonly LibraryViewModel _vm;
 
-    public LibraryPage(RecipeDbContext db)
+    public LibraryPage(LibraryViewModel vm)
     {
         InitializeComponent();
-        _db = db;
+        _vm = vm;
+        BindingContext = _vm;
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        await _db.Database.MigrateAsync(); // creates DB & applies seed
-        RecipesView.ItemsSource = await _db.Recipes.AsNoTracking().OrderBy(r => r.Id).ToListAsync();
-    }
-
-    private async void OnAddDummyClicked(object sender, EventArgs e)
-    {
-        _db.Recipes.Add(new Recipe { Title = "Tomato Soup", Servings = 3 });
-        await _db.SaveChangesAsync();
-        RecipesView.ItemsSource = await _db.Recipes.AsNoTracking().OrderBy(r => r.Id).ToListAsync();
+        await _vm.LoadAsync();
     }
 }
