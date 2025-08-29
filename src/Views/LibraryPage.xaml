@@ -17,7 +17,7 @@
                                 <CollectionView.ItemTemplate>
                                     <DataTemplate>
                                         <HorizontalStackLayout Spacing="8">
-                                            <Label Text="{Binding Qty}" />
+                                            <Label Text="{Binding QtyDisplay}" />
                                             <Label Text="{Binding Unit}" />
                                             <Label Text="{Binding NameRaw}" />
                                         </HorizontalStackLayout>

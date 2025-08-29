@@ -15,4 +15,7 @@ public class RecipeIngredient
     public string NameCanonical { get; set; } = "";
     
     public Recipe? Recipe { get; set; }
+    
+    [NotMapped]
+    public string QtyDisplay => Qty == 0 ? "" : Qty % 1 == 0 ? ((int)Qty).ToString() : Qty.ToString("0.##");
 }

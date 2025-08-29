@@ -75,7 +75,7 @@ public static class MauiProgram
                         {
                             NameCanonical = "tomatoes",
                             NameRaw = "tomato (diced)",
-                            Qty = 2,
+                            Qty = (decimal)2.5,
                             Unit = "cup"
                         },
                         new RecipeIngredient
