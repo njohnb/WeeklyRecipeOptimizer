@@ -11,6 +11,7 @@ public partial class AddRecipeViewModel : ObservableObject
 {
     private readonly IDbContextFactory<RecipeDbContext> _factory;
     private readonly IPdfImportService _pdfService;
+    private readonly IHtmlImportService _htmlService;
 
     [ObservableProperty] private int? recipeId;
     [ObservableProperty] private bool isEditMode;
@@ -36,14 +37,21 @@ public partial class AddRecipeViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     
     public IRelayCommand ImportFromPdfCommand { get; }
+    public IRelayCommand ImportFromUrlCommand { get; }
     
-    public AddRecipeViewModel(IDbContextFactory<RecipeDbContext> factory, IPdfImportService pdfService)
+    public AddRecipeViewModel(
+        IDbContextFactory<RecipeDbContext> factory,
+        IPdfImportService pdfService,
+        IHtmlImportService htmlService)
     {
         _factory = factory;
         _pdfService = pdfService;
+        _htmlService = htmlService;
+        
         ImportFromPdfCommand = new AsyncRelayCommand(ImportFromPdfAsync);
-
+        ImportFromUrlCommand = new AsyncRelayCommand(ImportFromUrlAsync);
     }
+    
     
     public event EventHandler<string>? SaveFailed;
     public event EventHandler? Saved;
@@ -208,4 +216,34 @@ public partial class AddRecipeViewModel : ObservableObject
         }
         finally { IsBusy = false; }
     }
+
+    private async Task ImportFromUrlAsync()
+    {
+        if (IsBusy) return;
+        try
+        {
+            IsBusy = true;
+            var url = await Shell.Current.DisplayPromptAsync("Import from URL", "Paste the recipe webpage URL:");
+            if (string.IsNullOrWhiteSpace(url)) return;
+
+            var result = await _htmlService.ImportFromUrlAsync(url);
+            if (!result.Success)
+            {
+                await Shell.Current.DisplayAlert("Import Failed", result.Error ?? "Unknown error.", "OK");
+                return;
+            }
+
+            Title = string.IsNullOrWhiteSpace(result.Title) ? Title : result.Title!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Servings)) Servings = result.Servings!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Equipment)) Equipment = result.Equipment!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.IngredientsText)) IngredientsText = result.IngredientsText!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Steps)) Steps = result.Steps!.Trim();
+        }
+        catch (Exception ex)
+        {
+            await Shell.Current.DisplayAlert("Import Error", ex.Message, "OK");
+        }
+        finally { IsBusy = false; }
+    }
+    
 }

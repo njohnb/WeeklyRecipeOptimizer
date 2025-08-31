@@ -4,8 +4,9 @@
              Title="Add Recipe">
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="12">
-            <HorizontalStackLayout>
+            <HorizontalStackLayout Padding="8" Spacing="8">
                 <Button Text="Import from PDF" Command="{Binding ImportFromPdfCommand}" />
+                <Button Text="Import from URL" Command="{Binding ImportFromUrlCommand}" />
             </HorizontalStackLayout>
             <!-- Title -->
             <Label>

@@ -32,7 +32,19 @@ public static class MauiProgram
         // 2) Pages and VM via DI
         builder.Services.AddSingleton<LibraryPage>();
         builder.Services.AddSingleton<LibraryViewModel>();
+        
+        // register services
+        
+        // html import service
+        const bool EnableNetworkImports = true;
+        builder.Services.AddSingleton<IWebPageFetcher>(sp =>
+            new HttpWebPageFetcher(new HttpClient(), EnableNetworkImports));
+        builder.Services.AddSingleton<IHtmlImportService, HtmlImportService>();
+        
+        // pdf import service
         builder.Services.AddSingleton<IPdfImportService, PdfImportService>();
+        
+        // debug dump service
         builder.Services.AddSingleton<IDebugDumpService, DebugDumpService>();
         
         
