@@ -12,4 +12,8 @@ public class Recipe
     
     public List<RecipeIngredient> Ingredients { get; set; } = new();
 
+    public List<string> Equipment { get; set; } = new();
+    
+    public List<string> Steps { get; set; } = new();
+    
 }

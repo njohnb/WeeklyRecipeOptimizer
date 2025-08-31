@@ -4,7 +4,9 @@
              Title="Add Recipe">
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="12">
-            
+            <HorizontalStackLayout>
+                <Button Text="Import from PDF" Command="{Binding ImportFromPdfCommand}" />
+            </HorizontalStackLayout>
             <!-- Title -->
             <Label>
                 <Label.FormattedText>
@@ -27,6 +29,11 @@
             </Label>
             <Entry Placeholder="Enter servings" Keyboard="Numeric" Text="{Binding Servings}" />
 
+            <!-- Equipment -->
+            <Label Text="Equipment (optional)" FontAttributes="Bold" />
+            <Editor Placeholder="Add equipment (one per line)"
+                    AutoSize="TextChanges"
+                    Text="{Binding Equipment}" />
             <!-- Ingredients -->
             <Label>
                 <Label.FormattedText>

@@ -32,7 +32,11 @@ public static class MauiProgram
         // 2) Pages and VM via DI
         builder.Services.AddSingleton<LibraryPage>();
         builder.Services.AddSingleton<LibraryViewModel>();
-
+        builder.Services.AddSingleton<IPdfImportService, PdfImportService>();
+        builder.Services.AddSingleton<IDebugDumpService, DebugDumpService>();
+        
+        
+        
         // Optional: other pages/VMs can be added here
         // builder.Services.AddSingleton<HomePage>();
         // builder.Services.AddSingleton<HomeViewModel>();
@@ -93,6 +97,16 @@ public static class MauiProgram
                             Qty = 5,
                             Unit = "g"
                         }
+                    },
+                    Equipment =
+                    {
+                        "Gallon Sized Pot"
+                    },
+                    Steps =
+                    {
+                        "Bring water to a boil",
+                        "Add pasta and cook for 10 minutes",
+                        "Add tomatoes and basil and cook for 5 minutes"
                     }
                 };
                 db.Recipes.Add(r);

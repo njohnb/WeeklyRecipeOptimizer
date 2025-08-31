@@ -3,12 +3,14 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using RecipeOptimizer.Data;
 using RecipeOptimizer.Models;
+using RecipeOptimizer.Services;
 
 namespace RecipeOptimizer.ViewModels;
 
 public partial class AddRecipeViewModel : ObservableObject
 {
     private readonly IDbContextFactory<RecipeDbContext> _factory;
+    private readonly IPdfImportService _pdfService;
 
     [ObservableProperty] private int? recipeId;
     [ObservableProperty] private bool isEditMode;
@@ -26,12 +28,21 @@ public partial class AddRecipeViewModel : ObservableObject
     private string ingredientsText = ""; // one per line
     
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsValid))]
     private string steps = "";
 
-    public AddRecipeViewModel(IDbContextFactory<RecipeDbContext> factory)
+    [ObservableProperty]
+    private string equipment = ""; // one per line
+    
+    [ObservableProperty] private bool isBusy;
+    
+    public IRelayCommand ImportFromPdfCommand { get; }
+    
+    public AddRecipeViewModel(IDbContextFactory<RecipeDbContext> factory, IPdfImportService pdfService)
     {
         _factory = factory;
+        _pdfService = pdfService;
+        ImportFromPdfCommand = new AsyncRelayCommand(ImportFromPdfAsync);
+
     }
     
     public event EventHandler<string>? SaveFailed;
@@ -59,6 +70,9 @@ public partial class AddRecipeViewModel : ObservableObject
                 (recipe.Ingredients ?? new()).Select(i =>
                     string.IsNullOrWhiteSpace(i.NameRaw) ? i.NameCanonical : i.NameRaw));
             // Steps: load when you persist them.
+            
+            // Equipment: load when you persist them.
+            
         }
         catch
         {
@@ -110,7 +124,7 @@ public partial class AddRecipeViewModel : ObservableObject
                         Unit = ""
                     });
                 }
-
+                
                 await db.SaveChangesAsync();
                 Saved?.Invoke(this, EventArgs.Empty);
                 return;
@@ -151,5 +165,47 @@ public partial class AddRecipeViewModel : ObservableObject
             SaveFailed?.Invoke(this, "Couldn’t save the recipe. Please try again.");
 
         }
+    }
+
+    private async Task ImportFromPdfAsync()
+    {
+        if (IsBusy) return;
+        try
+        {
+            IsBusy = true;
+            var file = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Choose a recipe PDF",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, new[] { ".pdf" } },
+                    { DevicePlatform.MacCatalyst, new[] { "com.adobe.pdf" } },
+                    { DevicePlatform.iOS, new[] { "com.adobe.pdf" } },
+                    { DevicePlatform.Android, new[] { "application/pdf" } }
+                })
+            });
+
+            if (file == null) return;
+
+            using var stream = await file.OpenReadAsync();
+            var result = await _pdfService.ImportRecipeFromPdfAsync(stream);
+
+            if (!result.Success)
+            {
+                await Shell.Current.DisplayAlert("Import Failed", result.Error ?? "Unknown error.", "OK");
+                return;
+            }
+
+            Title = string.IsNullOrWhiteSpace(result.Title) ? Title : result.Title!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Servings)) Servings = result.Servings!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Equipment)) Equipment = result.Equipment!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.IngredientsText)) IngredientsText = result.IngredientsText!.Trim();
+            if (!string.IsNullOrWhiteSpace(result.Steps)) Steps = result.Steps!.Trim();
+        }
+        catch (Exception ex)
+        {
+            await Shell.Current.DisplayAlert("Import Error", ex.Message, "OK");
+        }
+        finally { IsBusy = false; }
     }
 }
