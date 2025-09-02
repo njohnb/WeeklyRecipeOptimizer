@@ -1,5 +1,6 @@
 ﻿// /src/Services/PdfImportService.cs
 using System.Text;
+//using Android.Icu.Text;
 using UglyToad.PdfPig;
 using PdfPage = UglyToad.PdfPig.Content.Page;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
@@ -73,12 +74,16 @@ namespace RecipeOptimizer.Services
             s.Position = 0;
             var sb = new StringBuilder();
             using var doc = PdfDocument.Open(s);
+            int pageNo = 0;
             foreach (PdfPage page in doc.GetPages())
             {
+                pageNo++;
                 var pageText = ExtractPageText(page);
                 if (!string.IsNullOrWhiteSpace(pageText))
                 {
+                    sb.AppendLine($"=== PAGE {pageNo} START ===");
                     sb.AppendLine(pageText.TrimEnd());
+                    sb.AppendLine($"=== PAGE {pageNo} END ===");
                     sb.AppendLine(); // page break
                 }
             }
@@ -87,50 +92,130 @@ namespace RecipeOptimizer.Services
 
         private static string ExtractPageText(PdfPage page)
         {
-            // 1) Best effort: PdfPig’s layout-aware extractor (includes line breaks)
-            string? text = null;
+            // 1) try layout-aware first
             try
             {
-                text = ContentOrderTextExtractor.GetText(page);
+                var t = ContentOrderTextExtractor.GetText(page);
+                if (!string.IsNullOrWhiteSpace(t))
+                    return CleanHeadersFooters(t);
             }
-            catch { /* fall back */ }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
 
-            if (!string.IsNullOrWhiteSpace(text))
-                return text;
-
-            // 2) Fallback: group words into lines by Y position
+            // 2) Reconstruct: words -> (maybe) columns -> rows
             var words = page.GetWords().ToList();
-            if (words.Count == 0) return page.Text; // last resort
+            if (words.Count == 0)
+                return CleanHeadersFooters(page.Text ?? string.Empty);
 
-            // Tolerance for line “row” grouping; adjust if needed
-            const double yTolerance = 2.0;
-            var rows = new List<(double y, List<string> items)>();
-
-            
+            // Build a simple X histogram to detect 2 clusters (two columns)
+            var xs = words.Select(w => w.BoundingBox.Left + (w.BoundingBox.Width / 2)).OrderBy(v => v).ToArray();
+            double median = xs[xs.Length / 2];
+            // split into left/right buckets by median gap
+            var left = new List<UglyToad.PdfPig.Content.Word>();
+            var right = new List<UglyToad.PdfPig.Content.Word>();
+            // if the layout is actually 1 column, the "right" will be nearly empty; we handle that below
             foreach (var w in words)
             {
-                var y = w.BoundingBox.Bottom; // or w.Baseline.YStart
-                int idx = rows.FindIndex(r => Math.Abs(r.y - y) <= yTolerance);
-                if (idx < 0)
-                    rows.Add((y, new List<string> { w.Text }));
+                var midX = w.BoundingBox.Left + (w.BoundingBox.Width / 2);
+                if (midX < median)
+                    left.Add(w);
                 else
-                    rows[idx].items.Add(w.Text);
+                    right.Add(w);
             }
 
-            // Sort rows from top to bottom (PDF Y increases up); PdfPig pages typically have higher Y at top
-            rows.Sort((a, b) => b.y.CompareTo(a.y));
+            string RebuildColumn(List<UglyToad.PdfPig.Content.Word> bucket)
+            {
+                if (bucket.Count == 0) return string.Empty;
+                
+                // group into rows by Y (bottom) with tolerance, then sort each row by X
+                const double yTol = 2.0;
+                var rows = new List<(double y, List<UglyToad.PdfPig.Content.Word> items)>();
+                foreach (var w in bucket)
+                {
+                    var y = w.BoundingBox.Bottom;
+                    int idx = rows.FindIndex(r => Math.Abs(r.y - y) <= yTol);
+                    if(idx < 0) rows.Add((y, new List<UglyToad.PdfPig.Content.Word> { w }));
+                    else rows[idx].items.Add(w);
+                }
+                // top->bottom (PdfPig Y increases upward
+                rows.Sort((a, b) => b.y.CompareTo(a.y));
+                var sb = new StringBuilder();
+                foreach (var row in rows)
+                {
+                    var line = row.items.OrderBy(i => i.BoundingBox.Left).Select(i => i.Text).ToArray();
+                    sb.AppendLine(string.Join(" ", line));
+                }
+                return sb.ToString();
+            }
 
-            var sb = new StringBuilder();
-            foreach (var row in rows)
-                sb.AppendLine(string.Join(" ", row.items));
-
-            return sb.ToString();
+            var leftText = RebuildColumn(left);
+            var rightText = RebuildColumn(right);
+            
+            // if "right" is basically empty, treat as single column (use all words)
+            if (string.IsNullOrWhiteSpace(rightText))
+            {
+                var all = new List<UglyToad.PdfPig.Content.Word>(words);
+                all.Sort((a, b) =>
+                {
+                    // sort by Y desc, then X asc
+                    int byY = -a.BoundingBox.Bottom.CompareTo(b.BoundingBox.Bottom);
+                    return (byY != 0) ? byY : a.BoundingBox.Left.CompareTo(b.BoundingBox.Left);
+                });
+                
+                var sb = new StringBuilder();
+                double? curY = null;
+                const double rowTol = 2.0;
+                var row = new List<string>();
+                foreach (var w in all)
+                {
+                    if (curY is null || Math.Abs(curY.Value - w.BoundingBox.Bottom) <= rowTol)
+                    {
+                        curY = curY ?? w.BoundingBox.Bottom;
+                        row.Add(w.Text);
+                    }
+                    else
+                    {
+                        sb.AppendLine(string.Join(" ", row));
+                        row.Clear();
+                        row.Add(w.Text);
+                        curY = w.BoundingBox.Bottom;
+                    }
+                }
+                
+                if (row.Count > 0) sb.AppendLine(string.Join(" ", row));
+                return CleanHeadersFooters(sb.ToString());
+            }
+            
+            // two-column: left then right
+            var combined = (leftText + "\n" + rightText).Trim();
+            return CleanHeadersFooters(combined);
         }
 
-        
+        private static string CleanHeadersFooters(string text)
+        {
+            // Remove common print headers/footers: site URLs, “print”, page x/y, timestamps
+            var lines = text.Replace("\r\n","\n").Replace("\r","\n").Split('\n')
+                .Select(l => l.TrimEnd()).ToList();
 
-        
+            bool IsJunk(string l) =>
+                string.IsNullOrWhiteSpace(l)
+                || System.Text.RegularExpressions.Regex.IsMatch(l, @"https?://")
+                || System.Text.RegularExpressions.Regex.IsMatch(l, @"(?i)\bprint\b")
+                || System.Text.RegularExpressions.Regex.IsMatch(l, @"^\s*\d+\s*/\s*\d+\s*$") // "1/2"
+                || System.Text.RegularExpressions.Regex.IsMatch(l, @"^\s*\d{1,2}/\d{1,2}/\d{2,4}") // date
+                || System.Text.RegularExpressions.Regex.IsMatch(l, @"(?i)\ballrecipes\.com\b");
 
-        
+            var filtered = lines.Where(l => !IsJunk(l)).ToList();
+            // Collapse stray duplicate blank-lines; final trim
+            return string.Join("\n", filtered).Trim();
+        }
+
+
+
+
+
     }
 }

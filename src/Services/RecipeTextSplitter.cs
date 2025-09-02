@@ -21,10 +21,12 @@ public class RecipeTextSplitter
         {
             // Normalize → split → trim
             var allLines = t.Replace("\r\n", "\n").Replace("\r", "\n")
-                .Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+                .Split('\n').Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .Where(l => !IsPageMarker(l)).ToList();
 
             // Title is first non-empty
-            var title = allLines.FirstOrDefault() ?? "Imported Recipe";
+            var title = allLines.FirstOrDefault(l => !IsHeadingLine(l)) ?? "Imported Recipe";
 
             // Extract meta line (if present)
             var metaLine = allLines.FirstOrDefault(IsMetaLine) ?? "";
@@ -36,7 +38,7 @@ public class RecipeTextSplitter
             if (!string.IsNullOrEmpty(metaLine))
             {
                 // Servings: "yield: 6 SERVINGS", "serves 4", etc.
-                var sMatch = Regex.Match(metaLine, @"(?i)(serves|servings?|yield)\D+(\d+)");
+                var sMatch = Regex.Match(metaLine, @"(?i)\b(serves|servings?|yield)\D+(\d+)\b");
                 if (sMatch.Success) servings = sMatch.Groups[2].Value;
 
                 // Times
@@ -53,6 +55,7 @@ public class RecipeTextSplitter
             var lines = allLines
                 .Where(l => !IsMetaLine(l))                   // <-- skip meta row
                 .Where(l => !IsJunkLine(l))                   // <-- from a previous snippet
+                .Where(l => !IsHeadingLine(l))                
                 .ToList();
             
             RemoveHeaderBanner(lines);
@@ -67,13 +70,28 @@ public class RecipeTextSplitter
             var bestIngr = FindMaxIngredientRun(lines, 0, lines.Count);
             
             string ingredients = "";
-            string steps = "";
-            string equipment = "";
                     
             if (bestIngr.start >= 0 && bestIngr.len >= 2)
                 ingredients = string.Join("\n", lines.Skip(bestIngr.start).Take(bestIngr.len));
 
-            // 2) STEPS: first step-like line AFTER ingredients block; else slice after a directions header (not in banner)
+            if (!string.IsNullOrWhiteSpace(ingredients))
+            {
+                // tag sublists using original "lines"
+                ingredients = TagIngredientSublists(ingredients, lines);
+            }
+            
+            // find steps before and after ingredients (in case of page breaks)
+            var stepsList = new List<string>();
+            
+            // (Pre-ingredients): top -> just before ingredients head/block
+            int preEnd = (bestIngr.start > 0 ? bestIngr.start : (idxIngredientsHdr >= 0 ? idxIngredientsHdr : lines.Count));
+            if (preEnd > 0)
+            {
+                var pre = CaptureStepsInRange(lines, 0, preEnd);
+                if(pre.Count > 0) stepsList.AddRange(pre);
+            }
+            
+            // (B) first step-like line AFTER ingredients block; else slice after a directions header (not in banner))
             int idxFirstStep = -1;
             if (bestIngr.start >= 0)
             {
@@ -86,27 +104,47 @@ public class RecipeTextSplitter
 
             if (idxFirstStep >= 0)
             {
-                var stepBlock = TrimAfterNotes(lines.Skip(idxFirstStep));
-                steps = string.Join("\n", stepBlock);
+                var post = CaptureStepsInRange(lines, idxFirstStep, lines.Count);
+                if (post.Any()) stepsList.AddRange(post);
             }
-            else if (idxDirectionsHdr >= 0)
+            else
             {
-                // Slice from directions header to the next header, then trim at NOTES/URLs
-                string SliceSection(List<string> _lines, int startIndex, params int[] otherHeadings)
+                int idxStageStart = FindIndex(
+                    lines,
+                    "(?:^|\\b)(instructions?|directions?|method|prep\\s*work|make\\s*the\\s*meat\\s*sauce|preheat.*noodles|assemble|bake|cooking(?:\\s*steps)?)\\b"
+                );
+
+                // Use whichever header we found (classic directions or stage header)
+                int startHdr = (idxDirectionsHdr >= 0) ? idxDirectionsHdr : idxStageStart;
+                if (startHdr >= 0)
                 {
-                    if (startIndex < 0) return "";
-                    var next = otherHeadings.Where(i => i >= 0 && i > startIndex).DefaultIfEmpty(_lines.Count).Min();
-                    var start = startIndex + 1;
-                    var end = Math.Max(start - 1, next - 1);
-                    return (end >= start) ? string.Join("\n", _lines.Skip(start).Take(end - start + 1)) : "";
+                    // local helper identical to what you had
+                    string SliceSection(List<string> _lines, int startIndex, params int[] otherHeadings)
+                    {
+                        if (startIndex < 0) return "";
+                        var next = otherHeadings.Where(i => i >= 0 && i > startIndex).DefaultIfEmpty(_lines.Count).Min();
+                        var start = startIndex + 1;
+                        var end = Math.Max(start - 1, next - 1);
+                        return (end >= start) ? string.Join("\n", _lines.Skip(start).Take(end - start + 1)) : "";
+                    }
+
+                    var raw = SliceSection(lines, startHdr, idxIngredientsHdr, idxEquipmentHdr);
+                    var post = TrimAfterNotes(raw.Split('\n'));
+                    if (post.Any()) stepsList.AddRange(post);
                 }
-                var rawSteps = SliceSection(lines, idxDirectionsHdr, idxIngredientsHdr, idxEquipmentHdr);
-                var stepBlock = TrimAfterNotes(rawSteps.Split('\n'));
-                steps = string.Join("\n", stepBlock);
             }
 
+            var steps = string.Join("\n", stepsList.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
+            
+            // tag sublists using original "lines"
+            if (!string.IsNullOrWhiteSpace(steps))
+            {
+                steps = TagStepSublists(steps.Split('\n'));
+            }
+            
             // 3) EQUIPMENT:
             //    Preferred: short lines BETWEEN ingredients and steps that look like tools.
+            string equipment = "";
             if (!string.IsNullOrWhiteSpace(ingredients) && !string.IsNullOrWhiteSpace(steps))
             {
                 int ingrEnd = bestIngr.start + bestIngr.len - 1;
@@ -114,28 +152,30 @@ public class RecipeTextSplitter
                 if (gapEndExclusive > ingrEnd + 1)
                 {
                     var gap = lines.Skip(ingrEnd + 1).Take(gapEndExclusive - (ingrEnd + 1))
-                                   .Where(IsLikelyEquipmentLine).Take(4).ToList();
+                        .Where(l => !IsStepLine(l))
+                        .Where(IsLikelyEquipmentLine)
+                        .Take(4).ToList();
                     if (gap.Count is >= 1 and <= 4)
                         equipment = string.Join("\n", gap);
                 }
             }
 
-            // Fallback: if still empty, try a tight slice after EQUIPMENT header (but not banner),
-            // stop at next header or when ingredient/step-like lines start appearing.
-            if (string.IsNullOrWhiteSpace(equipment) && idxEquipmentHdr >= 0)
-            {
-                var list = new List<string>();
-                for (int i = idxEquipmentHdr + 1; i < lines.Count; i++)
-                {
-                    var l = lines[i];
-                    if (IsHeadingLine(l)) break;
-                    if (IsIngredientLine(l) || IsStepLine(l)) break;
-                    if (IsLikelyEquipmentLine(l)) list.Add(l);
-                    else break; // keep it tight
-                    if (list.Count >= 4) break;
-                }
-                if (list.Count > 0) equipment = string.Join("\n", list);
-            }
+          //// Fallback: if still empty, try a tight slice after EQUIPMENT header (but not banner),
+          //// stop at next header or when ingredient/step-like lines start appearing.
+          //if (string.IsNullOrWhiteSpace(equipment) && idxEquipmentHdr >= 0)
+          //{
+          //    var list = new List<string>();
+          //    for (int i = idxEquipmentHdr + 1; i < lines.Count; i++)
+          //    {
+          //        var l = lines[i];
+          //        if (IsHeadingLine(l)) break;
+          //        if (IsIngredientLine(l) || IsStepLine(l)) break;
+          //        if (IsLikelyEquipmentLine(l)) list.Add(l);
+          //        else break; // keep it tight
+          //        if (list.Count >= 4) break;
+          //    }
+          //    if (list.Count > 0) equipment = string.Join("\n", list);
+          //}
 
             // Final sanity cleanup: if ingredients still include steps, prune them out
             if (!string.IsNullOrWhiteSpace(ingredients))
@@ -146,13 +186,18 @@ public class RecipeTextSplitter
 
             return (title, servings, ingredients, steps, equipment);
         }
+        private static bool IsPageMarker(string line) =>
+            Regex.IsMatch(line, @"^=== PAGE \d+ (START|END) ===$");
+
+        private static bool IsStepHeading(string line) =>
+            Regex.IsMatch(line, @"(?i)^\s*Step\s+\d+\s*$");
         
         private static void RemoveHeaderBanner(List<string> lines)
         {
             // Remove a top “banner” made of consecutive pure heading lines (e.g., INGREDIENTS / EQUIPMENT / INSTRUCTIONS)
             // Only consider the very first ~8 lines.
             int i = 0; int count = 0;
-            while (i < Math.Min(lines.Count, 8) && IsHeadingLine(lines[i]))
+            while (i < Math.Min(lines.Count, 8) && (IsHeadingLine(lines[i]) || IsStepHeading(lines[i])))
             {
                 count++; i++;
             }
@@ -164,28 +209,34 @@ public class RecipeTextSplitter
         private static (int start, int len) FindMaxIngredientRun(List<string> lines, int startIndexInclusive, int endIndexExclusive)
         {
             var best = (start: -1, len: 0);
-            int runStart = -1, runLen = 0;
+            int runStart = -1, runLen = 0, grace = 0;
 
             for (int i = startIndexInclusive; i < endIndexExclusive; i++)
             {
                 var l = lines[i];
-                if (IsHeadingLine(l) || IsJunkLine(l))
+                
+                if (IsIngredientLine(l))
                 {
-                    if (runLen > 0 && runLen > best.len) best = (runStart, runLen);
-                    runStart = -1; runLen = 0;
+                    if (runStart < 0)
+                    {
+                        runStart = i;
+                        runLen = 0;
+                        grace = 0;
+                    }
+                    runLen++;
+                    continue;
+                }
+                
+                // allow up to 2 subsection headers within an ingredient run (e.g., "Cheese Filling", "Meat Sauce")
+                if (runStart >= 0 && IsSubsectionHeading(l) && grace < 2)
+                {
+                    grace++;
                     continue;
                 }
 
-                if (IsIngredientLine(l))
-                {
-                    if (runStart < 0) runStart = i;
-                    runLen++;
-                }
-                else
-                {
-                    if (runLen > 0 && runLen > best.len) best = (runStart, runLen);
-                    runStart = -1; runLen = 0;
-                }
+                // close current run if active
+                if (runStart >= 0 && runLen > best.len) best = (runStart, runLen);
+                runStart = -1; runLen = 0; grace = 0;
             }
             if (runLen > 0 && runLen > best.len) best = (runStart, runLen);
             return best;
@@ -206,23 +257,82 @@ public class RecipeTextSplitter
             return cookRx.IsMatch(line) || !Regex.IsMatch(line, @"[.!?]$");
         }
         
+        private static string TagIngredientSublists(string ingredients, IEnumerable<string> sourceLines)
+        {
+            var src = sourceLines.ToList();
+            if (string.IsNullOrWhiteSpace(ingredients)) return ingredients;
+            var set = new HashSet<string>(ingredients.Split('\n'));
+
+            // Prepend a tiny tag "[Cheese Filling]" right before the first ingredient that follows such a header.
+            var output = new List<string>();
+            string? currentTag = null;
+            foreach (var l in src)
+            {
+                if (IsSubsectionHeading(l)) { currentTag = l.Trim(); continue; }
+                if (!set.Contains(l)) continue;
+                if (!string.IsNullOrEmpty(currentTag))
+                {
+                    output.Add($"[{currentTag}]");
+                    currentTag = null;
+                }
+                output.Add(l);
+            }
+            return (output.Count > 0) ? string.Join("\n", output) : ingredients;
+        }
+        
+        private static string TagStepSublists(IEnumerable<string> stepLines)
+        {
+            var output = new List<string>();
+            string? currentTag = null;
+
+            foreach (var l in stepLines)
+            {
+                if (IsSubsectionHeading(l))
+                {
+                    currentTag = l.Trim();
+                    continue; // don’t keep the raw heading line
+                }
+
+                if (!string.IsNullOrEmpty(currentTag))
+                {
+                    output.Add($"[{currentTag}]");
+                    currentTag = null;
+                }
+
+                output.Add(l);
+            }
+            return string.Join("\n", output);
+        }
+        
         // Stop step capture at NOTES, URLs, or social lines
         private static List<string> TrimAfterNotes(IEnumerable<string> input)
         {
-            var stopRx = new Regex(@"(?i)^(notes\b|this .* recipe .*|https?://)", RegexOptions.IgnoreCase);
-            var list = new List<string>();
-            foreach (var l in input)
+            // keep only bona fide step lines, ignore any notes/tips/headers
+            var all = input.ToList();
+            
+            // build a compact list of step lines
+            var stepsOnly = new List<string>();
+            foreach (var l in all)
             {
-                if (stopRx.IsMatch(l)) break;
-                list.Add(l);
+                if (IsStepLine(l)) stepsOnly.Add(l);
             }
-            return list;
+
+            if (stepsOnly.Count == 0) return new List<string>(); // nothing step-like found
+
+            return stepsOnly;
         }
         
         // Heuristics
         private static bool IsHeadingLine(string line) =>
-            Regex.IsMatch(line, @"(?i)^\s*(ingredients?|equipment|tools?|instructions?|directions?|method|steps|notes|yield|serves|servings?)\s*:?\s*$");
+            Regex.IsMatch(line, @"(?i)^\s*(ingredients?|equipment|tools?|instructions?|directions?|method|steps|notes|yield|serves|servings?|chef's notes|nutrition facts)\s*:?\s*$")
+                || IsStepHeading(line);
 
+        // 1) Recognize blog-style subsection headers
+        private static bool IsSubsectionHeading(string line) =>
+            Regex.IsMatch(line, @"(?i)^\s*(cheese\s*filling|meat\s*sauce|lasagna\s*noodles.*topping|prep\s*work|"
+                                + @"make\s*the\s*meat\s*sauce|preheat.*noodles|assemble|bake|pro\s*tips?|notes?|nutrition\s*facts?)\s*:?\s*$");
+
+        
         private static bool IsJunkLine(string line)
         {
             // Typical garbage separators or stray bullets from OCR/extractor
@@ -241,23 +351,17 @@ public class RecipeTextSplitter
         private static readonly Regex RxUnitStart = new(
             @"(?i)^(?:cup|cups|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|milli?liters?|l|liters?|oz|ounces?|lb|lbs|pounds?|clove|cloves|slice|slices|can|cans|package|packages|stick|sticks|pinch|dash|sprig|bunch)\b",
             RegexOptions.Compiled);
-        // Require a verb for bullet steps
-        private static readonly Regex RxBulletVerb = new(
-            @"^\s*[•\-\–\—]\s+(?:Heat|Add|Stir|Bake|Combine|Serve|Wrap|Slice|Preheat|Whisk|Cook|Mix|Saute|Sauté|Simmer|Bring|Reduce|Pour|Spread|Season|Fold|Arrange)\b",
-            RegexOptions.Compiled);
         // Imperative (non-numbered) step start
         private static readonly Regex RxImperativeStart = new(
-            @"^(?:Heat|Add|Stir|Bake|Combine|Serve|Wrap|Slice|Preheat|Whisk|Cook|Mix|Saute|Sauté|Simmer|Bring|Reduce|Pour|Spread|Season|Fold|Arrange)\b",
+            @"(?i)^(?:Heat|Add|Stir|Bake|Combine|Serve|Wrap|Slice|Preheat|Whisk|Cook|Mix|Saute|Sauté|Simmer|Bring|Reduce|Pour|Spread|Season|Fold|Arrange|Gather|Place|Pound|Transfer|Beat|Layer|Make|Assemble)\b",
             RegexOptions.Compiled);
         // Capitalized-word fallback for numbered steps like "1 Wrap ..." (not a unit/qty)
         private static readonly Regex RxCapitalWord = new(@"^[A-Z][a-z]", RegexOptions.Compiled);
         private static bool IsStepLine(string line)
         {
             if (string.IsNullOrWhiteSpace(line)) return false;
-
             // Never call it a step if it looks like a heading or ingredient.
             if (IsHeadingLine(line) || IsIngredientLine(line)) return false;
-
             // --- Numbered steps ---
             var m = RxNumberedPrefix.Match(line);
             if (m.Success)
@@ -275,11 +379,6 @@ public class RecipeTextSplitter
                 // Otherwise, not a step.
                 return false;
             }
-
-            // --- Bulleted steps: require a verb after the bullet ---
-            if (RxBulletVerb.IsMatch(line))
-                return true;
-
             // --- Imperative (non-numbered, non-bulleted) steps ---
             if (RxImperativeStart.IsMatch(line))
                 return true;
@@ -331,15 +430,35 @@ public class RecipeTextSplitter
             // "salt, to taste", "optional"
             if (Regex.IsMatch(line, @"(?i)\b(to taste|optional)\b") && !IsHeadingLine(line))
                 return true;
-
+            
             return false;
         }
+        private static bool IsMetaLine(string line)
+        {
+            // Require explicit time units to be present (min/hour) and forbid “Per serving/Nutrition”
+            if (Regex.IsMatch(line, @"(?i)\b(per\s+serving|nutrition)\b")) return false;
 
+            bool hasServings = Regex.IsMatch(line, @"(?i)\b(yield|serves?|servings?)\b");
+            bool hasTime     = Regex.IsMatch(line, @"(?i)\b(prep|cook|total)\b")
+                               && Regex.IsMatch(line, @"(?i)\b(min(ute)?s?|hour(s)?)\b");
+            return hasServings && hasTime;
+        }
+        private static bool IsContinuationLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return false;
+            if (IsHeadingLine(line) || IsJunkLine(line)) return false;
+            if (IsIngredientLine(line)) return false;
 
-        private static bool IsMetaLine(string line) =>
-            Regex.IsMatch(line, @"(?i)\b(yield|serves?|servings?)\b.*\b(prep|cook|total)\b")
-            || Regex.IsMatch(line, @"(?i)\b(prep|cook|total)\b.*\b(yield|serves?|servings?)\b");
+            // If it looks like a new step, it's NOT a continuation.
+            if (IsStepLine(line)) return false;
 
+            // Short, linky, or pure “NOTES” lines are not continuations for steps;
+            // TrimAfterNotes will also guard later.
+            if (Regex.IsMatch(line, @"(?i)^(notes\b|pro\s*tips?\b|nutrition\b|tested by\b|https?://)")) return false;
+
+            // Otherwise, treat as continuation (typical: "and gochujang. In a gallon size …")
+            return true;
+        }
         // Optional: parse "2 HOURS 45 MINUTES" or "15 MINUTES" → minutes
         private static int ParseDurationMinutes(string text)
         {
@@ -350,12 +469,83 @@ public class RecipeTextSplitter
             if (m.Success) minutes += int.Parse(m.Groups[1].Value);
             return minutes;
         }
-        
         private static int FindIndex(List<string> lines, string pattern)
         {
             var rx = new Regex(@"(?i)^\s*" + pattern + @"\s*:?\s*$");
             for (int i = 0; i < lines.Count; i++)
                 if (rx.IsMatch(lines[i])) return i;
             return -1;
+        }
+        
+        private static List<string> CaptureStepsInRange(List<string> lines, int start, int endExclusive)
+        {
+            var collected = new List<string>();
+            
+            var stopRx = new Regex(@"(?i)^(notes\b|pro\s*tips?\b|nutrition\b|tested by\b|https?://)");
+            string? cur = null;
+            
+            for (int i = start; i < Math.Min(endExclusive, lines.Count); i++)
+            {
+                var l = lines[i];
+
+                // Section boundary? Bail out (but flush current step first).
+                if (Regex.IsMatch(l, @"(?i)^(ingredients?|equipment|nutrition|tested by)"))
+                    break;
+
+                // Skip explicit "Step N" label, but pull its content (next valid line) as a new step.
+                if (IsStepHeading(l))
+                {
+                    // Flush previous step if pending
+                    if (!string.IsNullOrWhiteSpace(cur)) { collected.Add(cur.Trim()); cur = null; }
+
+                    int j = i + 1;
+                    if (j < endExclusive && j < lines.Count)
+                    {
+                        var next = lines[j];
+                        if (!IsHeadingLine(next) && !IsJunkLine(next) && !IsIngredientLine(next))
+                        {
+                            cur = next.Trim();
+                            i = j; // we consumed the next line as content
+                        }
+                    }
+                    continue;
+                }
+
+                // Hard stop at notes/urls AFTER we started steps
+                if (stopRx.IsMatch(l))
+                {
+                    if (!string.IsNullOrWhiteSpace(cur)) collected.Add(cur.Trim());
+                    break;
+                }
+
+                if (IsStepLine(l))
+                {
+                    // Starting a NEW step: flush previous buffer
+                    if (!string.IsNullOrWhiteSpace(cur)) { collected.Add(cur.Trim()); cur = null; }
+                    cur = l.Trim();
+                    continue;
+                }
+
+                if (cur != null && IsContinuationLine(l))
+                {
+                    // Join continuation smartly: handle hyphenated line breaks
+                    if (cur.EndsWith("-", StringComparison.Ordinal))
+                    {
+                        cur = cur[..^1] + l.TrimStart(); // glue without extra space
+                    }
+                    else
+                    {
+                        cur += " " + l.Trim();
+                    }
+                    continue;
+                }
+
+                // Non-step, non-continuation: ignore
+            }
+            
+            if(!string.IsNullOrWhiteSpace(cur)) collected.Add(cur.Trim());
+            
+            // Final trim at notes/urls if any slipped through
+            return TrimAfterNotes(collected);
         }
 }
