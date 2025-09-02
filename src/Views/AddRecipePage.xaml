@@ -2,12 +2,94 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="RecipeOptimizer.Views.AddRecipePage"
              Title="Add Recipe">
-    <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <HorizontalStackLayout Padding="8" Spacing="8">
-                <Button Text="Import from PDF" Command="{Binding ImportFromPdfCommand}" />
-                <Button Text="Import from URL" Command="{Binding ImportFromUrlCommand}" />
-            </HorizontalStackLayout>
+    <ContentPage.ControlTemplate>
+        <OnPlatform x:TypeArguments="ControlTemplate">
+
+            <!-- Android Layout-->
+            <On Platform="Android">
+                <ControlTemplate>
+                    <ScrollView>
+                        <VerticalStackLayout Padding="16" Spacing="12"
+                                             BindingContext="{TemplateBinding BindingContext}">
+
+                            <!-- Android Header -->
+                            <Grid Padding="8"
+                                  ColumnDefinitions="*,*"
+                                  RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="12"
+                                  HorizontalOptions="Fill"
+                                  MinimumWidthRequest="0">
+
+                                <Button Grid.Column="0"
+                                        Text="Import from PDF"
+                                        HorizontalOptions="Fill"
+                                        BackgroundColor="CornflowerBlue"
+                                        Command="{Binding ImportFromPdfCommand}" />
+
+                                <Button Grid.Column="1"
+                                        Text="Import from URL*"
+                                        HorizontalOptions="Fill"
+                                        BackgroundColor="CornflowerBlue"
+                                        Command="{Binding ImportFromUrlCommand}" />
+
+                                <Label Grid.Row="1" Grid.ColumnSpan="2"
+                                       Text="*Note: When using URL import, use the print page when possible. The URL will look something like 'https://www.inspiredtaste.net/38940/spaghetti-with-meat-sauce-recipe/itr_print/'"
+                                       TextColor="Gray"
+                                       FontAttributes="Italic"
+                                       FontSize="12"
+                                       LineBreakMode="WordWrap"
+                                       HorizontalOptions="Fill"
+                                       Margin="4,2,0,8" />
+                            </Grid>
+                            <ContentPresenter/>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </ControlTemplate>
+            </On>
+
+            <!-- Windows Layout -->
+            <On Platform="WinUI">
+                <ControlTemplate>
+                    <ScrollView Orientation="Vertical">
+                        <VerticalStackLayout Padding="24" Spacing="16"
+                                             BindingContext="{TemplateBinding BindingContext}">
+
+                            <!-- Windows: buttons spaced and aligned left, note to the right -->
+                            <Grid Padding="0"
+                                  ColumnDefinitions="*,*"
+                                  RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="16"
+                                  HorizontalOptions="Fill"
+                                  MinimumWidthRequest="0">
+          
+                                <Button Grid.Column="0"
+                                        Text="Import from PDF"
+                                        HorizontalOptions="Fill"
+                                        Command="{Binding ImportFromPdfCommand}" />
+
+                                <Button Grid.Column="1"
+                                        Text="Import from URL*"
+                                        HorizontalOptions="Fill"
+                                        Command="{Binding ImportFromUrlCommand}" />
+
+                                <Label Grid.Row="1" Grid.ColumnSpan="2"
+                                       Text="*Note: When using URL import, use the print page when possible. The URL will look something like 'https://www.inspiredtaste.net/38940/spaghetti-with-meat-sauce-recipe/itr_print/'"
+                                       FontSize="12"
+                                       TextColor="Gray"
+                                       LineBreakMode="WordWrap"
+                                       HorizontalOptions="Fill"
+                                       Margin="4,2,0,0"/>
+                            </Grid>
+                            <ContentPresenter/>
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </ControlTemplate>
+            </On>
+        </OnPlatform>
+    </ContentPage.ControlTemplate>
+    <!-- Shared form content renders inside ContentPresenter -->
+    <ContentPage.Content>
+        <VerticalStackLayout Spacing="12">
             <!-- Title -->
             <Label>
                 <Label.FormattedText>
@@ -54,10 +136,16 @@
                     AutoSize="TextChanges"
                     Text="{Binding Steps}" />
 
+            <!-- Time -->
+            <Label Text="Prep/Cook Time (optional)" FontAttributes="Bold" />
+            <Editor Placeholder='(e.g. "Prep: 15 mins/minutes/m, Cook: 1.5 hrs/hours/h")'
+                    AutoSize="TextChanges"
+                    Text="{Binding Time}"/>
+            
             <!-- Save -->
             <Button Text="Save"
                     IsEnabled="{Binding IsValid}"
                     Command="{Binding SaveCommand}" />
         </VerticalStackLayout>
-    </ScrollView>
+    </ContentPage.Content>
 </ContentPage>
