@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using RecipeOptimizer.Data;
 using RecipeOptimizer.Models;
+using RecipeOptimizer.Views;
 using System.Collections.ObjectModel;
 
 namespace RecipeOptimizer.ViewModels;
@@ -40,5 +41,11 @@ public partial class LibraryViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+    [RelayCommand]
+    private async Task OpenRecipeAsync(Recipe? recipe)
+    {
+        if (recipe is null) return;
+        await Shell.Current.GoToAsync($"{nameof(RecipeDetailPage)}?id={recipe.Id}");
     }
 }

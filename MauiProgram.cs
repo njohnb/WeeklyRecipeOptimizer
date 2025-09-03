@@ -57,8 +57,9 @@ public static class MauiProgram
         
         builder.Services.AddTransient<LibraryViewModel>();
         builder.Services.AddTransient<AddRecipeViewModel>();
-        builder.Services.AddTransient<AddRecipePage>(); // for Shell to resolve
-        
+        builder.Services.AddTransient<AddRecipePage>();
+        builder.Services.AddTransient<RecipeDetailViewModel>(); // for Shell to resolve
+        builder.Services.AddTransient<RecipeDetailPage>();
         
         var app = builder.Build();
 

@@ -34,6 +34,20 @@ public partial class LibraryPage : ContentPage
             await Shell.Current.GoToAsync($"{nameof(AddRecipePage)}?id={r.Id}");
     }
 
+    private async void OnRecipeTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is not RecipeOptimizer.Models.Recipe recipe) return;
+        try
+        {
+            await Shell.Current.GoToAsync($"{nameof(RecipeDetailPage)}?id={recipe.Id}");
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Couldn't open recipe detail page: {exception.Message}");
+            throw;
+        }
+    }
+    
     private async void OnDeleteRecipeClicked(object sender, EventArgs e)
     {
         if ((sender as Button)?.CommandParameter is not Recipe r) return;

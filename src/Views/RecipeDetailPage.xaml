@@ -1,0 +1,34 @@
+﻿<!-- /src/Views/RecipeDetailPage.xaml -->
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="RecipeOptimizer.Views.RecipeDetailPage"
+             Title="{Binding Recipe.Title}">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="{Binding Recipe.Title}" FontSize="24" FontAttributes="Bold"/>
+            <Label>
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="Servings: "/>
+                        <Span Text="{Binding Recipe.Servings}"/>
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+
+            <Label Text="Ingredients" FontAttributes="Bold" />
+            <CollectionView ItemsSource="{Binding Recipe.Ingredients}" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <HorizontalStackLayout Spacing="8">
+                            <Label Text="{Binding QtyDisplay}" />
+                            <Label Text="{Binding Unit}" />
+                            <Label Text="{Binding NameRaw}" />
+                        </HorizontalStackLayout>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            
+            <!-- Add Steps/Notes/etc. when ready -->
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
